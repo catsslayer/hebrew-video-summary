@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "dev:mock": "MOCK_PROVIDERS=true next dev -p 3200"
   },
   "dependencies": {
     "next": "16.3.5",

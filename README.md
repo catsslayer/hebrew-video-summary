@@ -1,36 +1,100 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ניתוח סרטונים — שלב א׳
 
-## Getting Started
+אבטיפוס מקומי: העלאת סרטון מהמחשב, חילוץ פס הקול, תמלול וסיכום בעברית.
 
-First, run the development server:
+## מה זה, ומה זה לא
+
+המערכת הזו נבנתה כ**חלופה מקומית לסקיל `watch`**, שלא נמצא בחומרי הקורס לא
+כקובץ ולא כקישור. לא הותקן שום סקיל אחר בשם דומה.
+
+**בשלב א׳ אין ניתוח חזותי.** לא מחולצים פריימים, לא נשלחת אף תמונה לשום מודל,
+ואף רכיב אינו "צופה" בסרטון. מה שמנותח הוא **פס הקול בלבד**: הסיכום יודע מה
+נאמר, ואינו יודע מה מוצג על המסך. טקסט על שקף, גרף, כתוביות צרובות או פעולה
+שבוצעה בלי שנאמרה בקול — לא ייכללו בו. ההבהרה הזו מוצגת במסך, ונאכפת בקוד:
+`lib/providers/summarize.ts` מוסיף אותה לרשימת "מה לא ניתן היה לקבוע" גם אם
+המודל השמיט אותה.
+
+**קישורי YouTube ו-Vimeo נשארים להמשך.** בשלב הזה הקלט הוא קובץ מקומי בלבד.
+
+## מה נדרש כדי להריץ
+
+1. **ffmpeg ו-ffprobe מותקנים.** נכון לכתיבת השורות האלה הם **אינם מותקנים**
+   כאן: `brew install ffmpeg` נעצר בהודעה
+   `You have not agreed to the Xcode license`, שדורשת
+   `sudo xcodebuild -license accept` — פקודה שמחייבת סיסמה, ולכן היא באחריות
+   המשתמשת.
+2. **קובץ `.env.local`** לפי `.env.example`. הקובץ מוחרג מ-Git, ואין בו ערכים
+   לדוגמה — רק שמות משתנים. המפתחות מוזנים ידנית, ואינם מגיעים משום פרויקט אחר.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev:mock   # מצב מדומה, בלי קריאות בתשלום, על פורט 3200
+npm run dev        # מצב אמיתי, לפי מה שמוגדר ב-.env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## גבולות ומגבלות
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| מגבלה | ערך | למה |
+| --- | --- | --- |
+| גודל קובץ | 200MB | נבדק פעמיים: על `content-length` לפני פענוח הגוף, ועל מה שנכתב בפועל |
+| אורך סרטון | 10 דקות | אודיו של 10 דקות ב-64kbps הוא כ-5MB, הרחק מתקרת 25MB של Groq |
+| בדיקת אורך | 30 שניות | |
+| חילוץ אודיו | 3 דקות | |
+| תמלול | 4 דקות | |
+| סיכום | 2 דקות | |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**תקרת זמן לכל שלב בנפרד**, ולא אחת לכל העבודה — כך ההודעה אומרת *מה* נתקע.
 
-## Learn More
+**אין ניסיונות חוזרים אוטומטיים בתשלום.** כישלון נעצר ומדווח; ניסיון נוסף
+נעשה רק בלחיצה מפורשת.
 
-To learn more about Next.js, take a look at the following resources:
+**הקבצים הזמניים נמחקים תמיד** — בהצלחה, בכישלון ובתום זמן כאחד. הניקוי יושב
+ב-`finally` ולא בסוף המסלול המוצלח.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**מצב העבודות נשמר בזיכרון התהליך בלבד.** זה מתאים לאבטיפוס מקומי ולא מעבר לו.
+רענון דף **אינו** מתחיל ניתוח נוסף: מזהה העבודה יושב בכתובת, והדף חוזר לאותה
+עבודה. הפעלה מחדש של השרת, לעומת זאת, מוחקת את המצב — והמסך אומר את זה במילים
+במקום להציג שגיאה כללית.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## מה נבדק, ואיך
 
-## Deploy on Vercel
+כל הבדיקות שלהלן רצו **במצב מדומה או בלי מפתחות כלל. לא בוצעה שום קריאה
+בתשלום, ואף ספק חיצוני לא נקרא.** התוצאות המדומות מסומנות בטקסט עצמו
+(`[מדומה]`, `[תוצאה מדומה …]`) ובתווית במסך.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+הבדיקות רצו מול שרת פיתוח מקומי על פורט 3200, בדפדפן וב-HTTP ישיר:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| מה נבדק | תוצאה |
+| --- | --- |
+| מסלול מלא במצב מדומה | חמשת השלבים הושלמו, סיכום ותמלול הוצגו |
+| קובץ שאינו וידאו (`text/plain`) | 415 |
+| קובץ ריק | 400 |
+| בקשה בלי קובץ | 400 |
+| קובץ 201MB | 413, נדחה לפי `content-length` |
+| מזהה עבודה שאינו מוכר | 404, והמסך מסביר שהעבודה אבדה |
+| כישלון באמצע (ffmpeg חסר) | השלב סומן "נכשל", השלבים שאחריו "לא בוצע", ולא נעשתה קריאה לספק |
+| ניקוי קבצים זמניים | תיקיית העבודה נמחקה בכל אחד מהמקרים, כולל בכישלון |
+| רענון דף עם עבודה קיימת | רק `GET` לעבודה; לא נוצרה עבודה נוספת |
+| העלאה דרך הממשק עצמו | המזהה נכנס לכתובת, השלבים התקדמו עד סיכום |
+
+הקובץ ששימש לבדיקות הוא **קובץ דמה מסומן** (`dummy-test.mp4`, בייטים ריקים עם
+כותרת `DUMMY-TEST-FILE-NOT-A-REAL-VIDEO`) שנוצר בתיקייה זמנית ונמחק. **הוא אינו
+סרטון אמיתי**, ובמצב מדומה `ffprobe` אינו רץ ולכן הוא לא נדחה.
+
+### מה **לא** נבדק
+
+- **לא בוצעה אף קריאה אמיתית ל-Groq או ל-Anthropic.** המסלולים האלה נבדקו
+  בקוד ובמצב מדומה בלבד, וזו אינה הוכחה שהאינטגרציה עובדת.
+- **`ffmpeg` ו-`ffprobe` לא הורצו מעולם** — הם אינם מותקנים. חילוץ האודיו,
+  מדידת האורך ודחיית קובץ שאינו וידאו נבדקו רק דרך מסלול הכישלון.
+- לא נבדק סרטון אמיתי מקצה לקצה.
+
+## מה נדרש לבדיקה אמיתית אחת
+
+1. `sudo xcodebuild -license accept` ואז `brew install ffmpeg` — דורש סיסמה.
+2. מפתחות ב-`.env.local`: `GROQ_API_KEY`, `ANTHROPIC_API_KEY`.
+3. סרטון קצר אמיתי, רצוי עד דקה, כדי שהחיוב יהיה זניח.
+4. `npm run dev` (בלי `MOCK_PROVIDERS`), העלאה אחת.
+
+עלות משוערת לסרטון של דקה, לפי מחירי התיעוד: תמלול ב-`whisper-large-v3-turbo`
+בסביבות $0.0007, וסיכום ב-`claude-haiku-4-5` בסדר גודל של אגורות בודדות. אלה
+הערכות לפי המחירונים הרשמיים ולא מדידה, והמחירים עשויים להשתנות.
