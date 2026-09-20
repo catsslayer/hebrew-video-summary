@@ -4,8 +4,12 @@ import { AUDIO_BITRATE, AUDIO_SAMPLE_RATE } from "@/lib/config";
 /**
  * עטיפה ל-ffmpeg ול-ffprobe.
  *
- * **כל הרצה מוגבלת בזמן.** תהליך חיצוני שנתקע הוא בדיוק המקרה שמשאיר מסך
- * תקוע ב"מעבד…", ולכן התהליך נהרג בתום הזמן והשגיאה אומרת מה נתקע.
+ * **כל הרצה מוגבלת בזמן.** תהליך חיצוני שנתקע הוא בדיוק המקרה שמשאיר מסך תקוע
+ * ב"מעבד…", ולכן התהליך נהרג בתום הזמן והשגיאה אומרת מה נתקע.
+ *
+ * **פלט השגיאה הגולמי של הכלי אינו יוצא מכאן.** הוא מכיל את הנתיב המלא של
+ * הקובץ הזמני על הדיסק, והוא כתוב בשפת ffmpeg ולא בשפה של מי שמעלה סרטון. הוא
+ * נרשם ליומן השרת, והקורא מקבל הודעה שלנו.
  *
  * אין כאן שום נגיעה בתמונה: היחיד שמחולץ הוא פס הקול.
  */
@@ -14,6 +18,16 @@ export class ToolMissingError extends Error {
   constructor(tool: string) {
     super(`${tool} אינו מותקן. בלעדיו אי אפשר לחלץ את פס הקול.`);
     this.name = "ToolMissingError";
+  }
+}
+
+/** כישלון של הכלי עצמו. `detail` נשאר בשרת ואינו מוצג. */
+class ToolFailedError extends Error {
+  readonly detail: string;
+  constructor(tool: string, detail: string) {
+    super(`${tool} נכשל`);
+    this.name = "ToolFailedError";
+    this.detail = detail;
   }
 }
 
@@ -57,23 +71,38 @@ function run(
       settled = true;
       clearTimeout(timer);
       if (code === 0) resolve({ stdout, stderr });
-      // שורת השגיאה האחרונה של ffmpeg היא בדרך כלל הסיבה האמיתית.
-      else reject(new Error(stderr.trim().split("\n").pop() || `${tool} נכשל (קוד ${code})`));
+      else reject(new ToolFailedError(tool, stderr.trim() || `קוד יציאה ${code}`));
     });
   });
 }
 
+/** תרגום כישלון של הכלי להודעה שלנו, עם רישום הסיבה האמיתית ליומן השרת. */
+function translate(error: unknown, message: string): Error {
+  if (error instanceof ToolMissingError) return error;
+  if (error instanceof ToolFailedError) {
+    console.error(`[ffmpeg] ${error.message}: ${error.detail}`);
+    return new Error(message);
+  }
+  return error instanceof Error ? error : new Error(message);
+}
+
 /** אורך הסרטון בשניות. נקרא לפני כל עיבוד, כדי לאכוף את מגבלת האורך מוקדם. */
 export async function probeDuration(filePath: string, timeoutMs: number): Promise<number> {
-  const { stdout } = await run(
-    "ffprobe",
-    ["-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", filePath],
-    timeoutMs
-  );
-  const seconds = Number(stdout.trim());
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    throw new Error("לא ניתן לקרוא את אורך הסרטון. ייתכן שהקובץ פגום או שאינו וידאו.");
+  const unreadable = "לא ניתן לקרוא את אורך הסרטון. ייתכן שהקובץ פגום או שאינו וידאו.";
+
+  let stdout: string;
+  try {
+    ({ stdout } = await run(
+      "ffprobe",
+      ["-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", filePath],
+      timeoutMs
+    ));
+  } catch (error) {
+    throw translate(error, unreadable);
   }
+
+  const seconds = Number(stdout.trim());
+  if (!Number.isFinite(seconds) || seconds <= 0) throw new Error(unreadable);
   return seconds;
 }
 
@@ -88,12 +117,23 @@ export async function extractAudio(
   outputPath: string,
   timeoutMs: number
 ): Promise<void> {
-  await run(
-    "ffmpeg",
-    ["-hide_banner", "-loglevel", "error", "-y", "-i", inputPath,
-     "-vn", "-ac", "1", "-ar", String(AUDIO_SAMPLE_RATE), "-b:a", AUDIO_BITRATE, outputPath],
-    timeoutMs
-  );
+  try {
+    await run(
+      "ffmpeg",
+      ["-hide_banner", "-loglevel", "error", "-y", "-i", inputPath,
+       "-vn", "-ac", "1", "-ar", String(AUDIO_SAMPLE_RATE), "-b:a", AUDIO_BITRATE, outputPath],
+      timeoutMs
+    );
+  } catch (error) {
+    // סרטון בלי מסלול קול הוא המקרה השכיח, והוא ראוי להודעה משלו: אין כאן
+    // תקלה לתקן, פשוט אין מה לתמלל.
+    const detail = error instanceof ToolFailedError ? error.detail : "";
+    if (/does not contain any stream|Output file is empty/i.test(detail)) {
+      console.error(`[ffmpeg] ${detail}`);
+      throw new Error("בסרטון אין מסלול קול, ולכן אין מה לתמלל.");
+    }
+    throw translate(error, "חילוץ פס הקול נכשל. ייתכן שהקובץ פגום.");
+  }
 }
 
 /** בדיקה מוקדמת, כדי שהמסך יגיד "ffmpeg חסר" ולא ייפול באמצע העיבוד. */
