@@ -1,3 +1,4 @@
+import { requireAccess } from "@/lib/server-access";
 import { NextResponse } from "next/server";
 import { getJob } from "@/lib/jobs/store";
 import { runSummaryOnly } from "@/lib/jobs/pipeline";
@@ -16,6 +17,9 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(_request: Request, ctx: RouteContext<"/api/jobs/[id]/summarize">) {
+  const denied = requireAccess(_request);
+  if (denied) return denied;
+
   const { id } = await ctx.params;
   const job = getJob(id);
 

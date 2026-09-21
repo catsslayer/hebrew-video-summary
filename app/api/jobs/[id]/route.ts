@@ -1,3 +1,4 @@
+import { requireAccess } from "@/lib/server-access";
 import { NextResponse } from "next/server";
 import { getJob } from "@/lib/jobs/store";
 
@@ -12,6 +13,9 @@ import { getJob } from "@/lib/jobs/store";
 export const runtime = "nodejs";
 
 export async function GET(_request: Request, ctx: RouteContext<"/api/jobs/[id]">) {
+  const denied = requireAccess(_request);
+  if (denied) return denied;
+
   const { id } = await ctx.params;
   const job = getJob(id);
 

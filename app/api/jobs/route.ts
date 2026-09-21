@@ -1,3 +1,4 @@
+import { requireAccess } from "@/lib/server-access";
 import { NextResponse } from "next/server";
 import { ALLOWED_MIME, MAX_UPLOAD_BYTES, formatBytes, isMockMode } from "@/lib/config";
 import { createJob } from "@/lib/jobs/store";
@@ -18,6 +19,9 @@ export const runtime = "nodejs";
 export const maxDuration = 600;
 
 export async function POST(request: Request) {
+  const denied = requireAccess(request);
+  if (denied) return denied;
+
   // הבדיקה המוקדמת ביותר האפשרית. `request.formData()` מפענח את כל הגוף לפני
   // שהקוד שלנו רואה אותו, ולכן בלי השורות האלה קובץ ענק היה נקלט במלואו רק כדי
   // להידחות אחר כך.
