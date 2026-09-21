@@ -18,7 +18,7 @@ import { computeCost, formatUsd } from "@/lib/cost";
 type JobView = Omit<Job, "tempFiles">;
 
 const STEP_LABELS: Record<StepName, string> = {
-  upload: "קליטת הקובץ",
+  upload: "קליטת הסרטון",
   probe: "בדיקת אורך ותקינות",
   extract: "חילוץ פס הקול",
   transcribe: "תמלול",
@@ -59,6 +59,8 @@ export default function Analyzer() {
   const [uploading, setUploading] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [videoUrl, setVideoUrl] = useState("");
+  const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   /** קריאת המזהה מהכתובת. רענון חוזר לעבודה קיימת במקום לפתוח חדשה. */
@@ -129,6 +131,21 @@ export default function Analyzer() {
     } finally {
       setUploading(false);
     }
+  }
+
+  async function startLink(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (uploading || !rightsConfirmed) return;
+    setUploadError(null); setUploading(true); setLost(false); setJob(null);
+    try {
+      const response = await fetch("/api/jobs/link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: videoUrl, rightsConfirmed }) });
+      if (response.status === 401) { window.location.href = "/login"; return; }
+      const data = await response.json();
+      if (!response.ok) { setUploadError(data.error || "קליטת הקישור נכשלה."); return; }
+      const url = new URL(window.location.href); url.searchParams.set("job", data.jobId);
+      window.history.replaceState(null, "", url); setJobId(data.jobId);
+    } catch { setUploadError("לא הצלחנו לשלוח את הקישור לשרת."); }
+    finally { setUploading(false); }
   }
 
   /**
@@ -220,6 +237,17 @@ export default function Analyzer() {
           </button>
         </section>
       )}
+
+      {!jobId && <form onSubmit={startLink} className="flex flex-col gap-4 rounded-xl border border-blue-200 bg-white p-6 dark:border-blue-900 dark:bg-zinc-900">
+        <h2 className="text-lg font-semibold">או הדביקי קישור לסרטון</h2>
+        <label className="flex flex-col gap-2">קישור YouTube או Vimeo
+          <input type="url" required value={videoUrl} onChange={e=>setVideoUrl(e.target.value)} disabled={busy} dir="ltr" placeholder="https://www.youtube.com/watch?v=..." className="rounded-lg border border-zinc-300 bg-transparent p-3" />
+        </label>
+        <p className="text-sm text-zinc-500">סרטון יחיד עד 10 דקות. סרטונים פרטיים, שידורים חיים או קישורים שהמקור חוסם עשויים לא להיות זמינים. אפשר תמיד להעלות קובץ מהמחשב.</p>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={rightsConfirmed} onChange={e=>setRightsConfirmed(e.target.checked)} disabled={busy} required className="mt-1" />הסרטון שלי או שיש לי אישור להוריד ולנתח אותו.</label>
+        <p className="text-sm text-zinc-500">הלחיצה מפעילה תמלול וסיכום בתשלום אם הסרטון נקלט בהצלחה.</p>
+        <button disabled={busy || !rightsConfirmed} className="rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white disabled:opacity-40">{busy ? "מתחיל…" : "ניתוח מהקישור"}</button>
+      </form>}
 
       {/* ------------------------------------------------------- מצב השלבים */}
       {job && (

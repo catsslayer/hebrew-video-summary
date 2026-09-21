@@ -11,7 +11,9 @@ RUN npm run build
 FROM node:22.22.0-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates python3 python3-venv && rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv /opt/media-tools && /opt/media-tools/bin/pip install --no-cache-dir "yt-dlp[default]==2026.8.19"
+ENV YT_DLP_PATH=/opt/media-tools/bin/yt-dlp
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 COPY --from=build --chown=node:node /app/public ./public

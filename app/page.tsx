@@ -6,7 +6,7 @@ export default function Home() {
       <header>
         <h1 className="text-2xl font-semibold">ניתוח סרטונים</h1>
         <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-          העלאת סרטון מהמחשב, חילוץ פס הקול, תמלול וסיכום בעברית.
+          העלאת סרטון מהמחשב או קישור YouTube / Vimeo, תמלול וסיכום בעברית.
         </p>
       </header>
 
