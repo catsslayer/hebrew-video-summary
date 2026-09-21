@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Job, StepName, StepState } from "@/lib/jobs/store";
+import { computeCost, formatUsd } from "@/lib/cost";
 
 /**
  * מסך הניתוח.
@@ -57,6 +58,7 @@ export default function Analyzer() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   /** קריאת המזהה מהכתובת. רענון חוזר לעבודה קיימת במקום לפתוח חדשה. */
@@ -126,6 +128,25 @@ export default function Analyzer() {
       setUploadError("לא הצלחנו לשלוח את הקובץ לשרת.");
     } finally {
       setUploading(false);
+    }
+  }
+
+  /**
+   * ניסיון נוסף לסיכום בלבד, מהתמלול שכבר שולם עליו.
+   *
+   * נקרא רק מלחיצה. הכפתור מושבת בזמן הבקשה, כדי ששתי לחיצות לא ייצרו שתי
+   * קריאות בתשלום על אותו תמלול.
+   */
+  async function retrySummary() {
+    if (!jobId || retrying) return;
+    setRetrying(true);
+    try {
+      await fetch(`/api/jobs/${jobId}/summarize`, { method: "POST" });
+      await poll(jobId);
+    } catch {
+      // המצב נקרא ממילא מהמעקב; אין כאן מה להציג בנפרד.
+    } finally {
+      setRetrying(false);
     }
   }
 
@@ -236,13 +257,30 @@ export default function Analyzer() {
                 לא בוצע ניסיון חוזר אוטומטי. תמלול וסיכום הם קריאות בתשלום, וניסיון נוסף
                 נעשה רק בבחירה מפורשת.
               </p>
-              <button
-                type="button"
-                onClick={reset}
-                className="mt-3 rounded-lg bg-red-900 px-4 py-2 text-white dark:bg-red-100 dark:text-red-950"
-              >
-                בחירת קובץ וניסיון נוסף
-              </button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {job.transcript && !job.summary && (
+                  <button
+                    type="button"
+                    onClick={() => void retrySummary()}
+                    disabled={retrying}
+                    className="rounded-lg bg-red-900 px-4 py-2 text-white disabled:opacity-50 dark:bg-red-100 dark:text-red-950"
+                  >
+                    {retrying ? "מסכם…" : "ניסיון נוסף לסיכום בלבד"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="rounded-lg border border-red-900 px-4 py-2 text-red-900 dark:border-red-200 dark:text-red-100"
+                >
+                  בחירת קובץ חדש
+                </button>
+              </div>
+              {job.transcript && !job.summary && (
+                <p className="mt-2 text-xs text-red-800/80 dark:text-red-200/80">
+                  התמלול כבר הושלם ושמור. ניסיון נוסף מסכם אותו ואינו משלם שוב על התמלול.
+                </p>
+              )}
             </div>
           )}
 
@@ -284,6 +322,46 @@ export default function Analyzer() {
               <li key={index}>{item}</li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {/* ------------------------------------------------------- עלות בפועל */}
+      {job && !job.mock && job.usage.audioSeconds !== null && (
+        <section className="rounded-xl border border-zinc-200 bg-white p-6 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <h2 className="font-semibold">עלות בפועל</h2>
+          {(() => {
+            const cost = computeCost(job.usage);
+            return (
+              <>
+                <ul className="mt-3 flex flex-col gap-1 text-zinc-700 dark:text-zinc-300">
+                  <li>
+                    תמלול — {job.usage.audioSeconds.toFixed(1)} שניות אודיו:{" "}
+                    <span className="ltr-inline">
+                      {cost.transcribeUsd === null ? "לא דווח" : formatUsd(cost.transcribeUsd)}
+                    </span>
+                  </li>
+                  <li>
+                    סיכום — {job.usage.inputTokens ?? "?"} טוקני קלט,{" "}
+                    {job.usage.outputTokens ?? "?"} טוקני פלט:{" "}
+                    <span className="ltr-inline">
+                      {cost.summarizeUsd === null ? "לא דווח" : formatUsd(cost.summarizeUsd)}
+                    </span>
+                  </li>
+                </ul>
+                <p className="mt-3 font-medium">
+                  סה״כ:{" "}
+                  <span className="ltr-inline">
+                    {cost.totalUsd === null ? "לא ניתן לחשב" : formatUsd(cost.totalUsd)}
+                  </span>
+                  {cost.partial && " (חלקי — ספק אחד לא דיווח צריכה)"}
+                </p>
+                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  מחושב מהצריכה שהספקים דיווחו, לפי המחירים שנבדקו ב-21.9.2026. זו מדידה
+                  ולא אומדן, אך המחירים עצמם עשויים להשתנות.
+                </p>
+              </>
+            );
+          })()}
         </section>
       )}
 

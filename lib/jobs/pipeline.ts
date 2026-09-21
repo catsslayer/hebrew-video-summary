@@ -154,7 +154,10 @@ export async function runPipeline(jobId: string, inputPath: string): Promise<voi
       STEP_TIMEOUT_MS.transcribe,
       "התמלול"
     );
-    patchJob(jobId, { transcript: transcription.text });
+    patchJob(jobId, {
+      transcript: transcription.text,
+      usage: { ...getJob(jobId)!.usage, audioSeconds: transcription.seconds },
+    });
     markStep(
       jobId,
       "transcribe",
@@ -172,7 +175,14 @@ export async function runPipeline(jobId: string, inputPath: string): Promise<voi
       STEP_TIMEOUT_MS.summarize,
       "הסיכום"
     );
-    patchJob(jobId, { summary: summarized.summary });
+    patchJob(jobId, {
+      summary: summarized.summary,
+      usage: {
+        ...getJob(jobId)!.usage,
+        inputTokens: summarized.inputTokens,
+        outputTokens: summarized.outputTokens,
+      },
+    });
     markStep(jobId, "summarize", "done", summarized.mock ? "תוצאה מדומה, בלי חיוב" : "הושלם");
 
     patchJob(jobId, { status: "done" });
@@ -193,4 +203,40 @@ export async function runPipeline(jobId: string, inputPath: string): Promise<voi
 export async function cleanup(jobId: string): Promise<void> {
   await rm(workDirFor(jobId), { recursive: true, force: true }).catch(() => {});
   patchJob(jobId, { tempFiles: [] });
+}
+
+/**
+ * הרצת הסיכום מחדש, **מהתמלול השמור בלבד**.
+ *
+ * כשהסיכום נכשל, התמלול כבר שולם עליו והוא שמור על העבודה. הרצה חוזרת של כל
+ * הצינור הייתה משלמת עליו פעם שנייה בלי שום צורך. כאן משלמים רק על מה שנכשל.
+ *
+ * זו אינה חזרה אוטומטית: היא נקראת רק מבקשה מפורשת של המשתמשת.
+ */
+export async function runSummaryOnly(jobId: string): Promise<void> {
+  const job = getJob(jobId);
+  if (!job?.transcript) return;
+
+  patchJob(jobId, { status: "running", error: null });
+  markStep(jobId, "summarize", "running");
+
+  try {
+    const summarized = await withTimeout(
+      (signal) => summarize(job.transcript as string, signal),
+      STEP_TIMEOUT_MS.summarize,
+      "הסיכום"
+    );
+    patchJob(jobId, {
+      summary: summarized.summary,
+      status: "done",
+      usage: {
+        ...getJob(jobId)!.usage,
+        inputTokens: summarized.inputTokens,
+        outputTokens: summarized.outputTokens,
+      },
+    });
+    markStep(jobId, "summarize", "done", summarized.mock ? "תוצאה מדומה, בלי חיוב" : "הושלם");
+  } catch (error) {
+    failJob(jobId, "summarize", error instanceof Error ? error.message : "שגיאה לא מזוהה");
+  }
 }

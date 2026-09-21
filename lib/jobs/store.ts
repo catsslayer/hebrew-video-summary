@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Usage } from "@/lib/cost";
 
 /**
  * מצב העבודות — **בזיכרון התהליך בלבד.**
@@ -45,6 +46,11 @@ export type Job = {
   transcript: string | null;
   summary: Summary | null;
   error: string | null;
+  /**
+   * צריכה בפועל, כפי שהספקים דיווחו — ולא הערכה שלנו. השדות נשארים null
+   * כשספק לא החזיר את הנתון, כדי שחוסר מידע ייראה כחוסר ולא כאפס.
+   */
+  usage: Usage;
   /** קבצים זמניים שנוצרו. מנוקים בסיום ובכישלון כאחד. */
   tempFiles: string[];
 };
@@ -74,6 +80,7 @@ export function createJob(input: { fileName: string; fileBytes: number; mock: bo
     transcript: null,
     summary: null,
     error: null,
+    usage: { audioSeconds: null, inputTokens: null, outputTokens: null },
     tempFiles: [],
   };
   jobs.set(job.id, job);
