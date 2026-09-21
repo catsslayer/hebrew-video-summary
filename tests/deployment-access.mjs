@@ -29,11 +29,22 @@ try {
     await new Promise(r=>setTimeout(r,250));
   }
   assert(ready, 'server readiness');
-  for (const [path, method] of [['/','GET'],['/api/jobs','POST'],['/api/jobs/unknown','GET'],['/api/jobs/unknown/summarize','POST']]) {
+  for (const [path, method] of [['/api/jobs','POST'],['/api/jobs/unknown','GET'],['/api/jobs/unknown/summarize','POST']]) {
     assert.equal((await fetch(base+path,{method})).status,401, path);
     assert.equal((await fetch(base+path,{method,headers:{authorization:'Basic invalid'}})).status,401,path+' wrong password');
   }
+  assert.equal((await fetch(base,{redirect:'manual'})).status,307);
+  const loginPage = await fetch(base+'/login'); assert.equal(loginPage.status,200); assert.equal(loginPage.headers.get('www-authenticate'),null);
   assert.equal((await fetch(base,{headers:{authorization:auth}})).status,200);
+  const wrong=await fetch(base+'/api/login',{method:'POST',headers:{origin:base},body:new URLSearchParams({username:'yasmin',password:'wrong'}),redirect:'manual'});
+  assert.equal(wrong.headers.get('location'),'/login?error=1'); assert.equal(wrong.headers.get('set-cookie'),null);
+  const login=await fetch(base+'/api/login',{method:'POST',headers:{origin:base},body:new URLSearchParams({username:'yasmin',password}),redirect:'manual'});
+  assert.equal(login.status,303); const cookie=login.headers.get('set-cookie'); assert(cookie.includes('HttpOnly')); assert(cookie.includes('Secure'));
+  const sessionCookie=cookie.split(';')[0];
+  assert.equal((await fetch(base,{headers:{cookie:sessionCookie}})).status,200);
+  assert.equal((await fetch(base+'/api/jobs/unknown',{headers:{cookie:sessionCookie}})).status,404);
+  assert.equal((await fetch(base+'/api/jobs/unknown',{headers:{cookie:sessionCookie+'broken'}})).status,401);
+
   assert.equal((await fetch(base+'/api/jobs',{method:'POST',headers:{authorization:auth,origin:'https://evil.example'}})).status,403);
   assert.equal((await fetch(base+'/api/jobs',{method:'POST',headers:{authorization:auth}})).status,403);
   const form = new FormData();

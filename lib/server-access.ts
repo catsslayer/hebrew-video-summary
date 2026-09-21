@@ -1,4 +1,23 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+
+export const SESSION_COOKIE = "video_session";
+export const SESSION_SECONDS = 86400;
+const digest = (v: string) => createHash("sha256").update(v).digest();
+export const safeEqual = (a: string, b: string) => timingSafeEqual(digest(a), digest(b));
+export function createSession(): string {
+  const payload = `${Date.now() + SESSION_SECONDS * 1000}.${randomBytes(16).toString("hex")}`;
+  return payload + "." + createHmac("sha256", process.env.APP_PASSWORD!).update(payload).digest("hex");
+}
+export function validSession(request: Request): boolean {
+  const token = (request.headers.get("cookie") || "").split(";").map(v => v.trim()).find(v => v.startsWith(SESSION_COOKIE + "="))?.slice(SESSION_COOKIE.length + 1);
+  if (!token || !process.env.APP_PASSWORD) return false;
+  const parts = token.split(".");
+  if (parts.length !== 3 || !/^\d+$/.test(parts[0]) || !/^[a-f0-9]{32}$/.test(parts[1])) return false;
+  const expires = Number(parts[0]);
+  if (expires <= Date.now() || expires > Date.now() + SESSION_SECONDS * 1000) return false;
+  const signature = createHmac("sha256", process.env.APP_PASSWORD).update(parts[0] + "." + parts[1]).digest("hex");
+  return safeEqual(parts[2], signature);
+}
 
 /** Single-owner demo access. Production is closed until a strong password is set. */
 export function requireAccess(request: Request): Response | null {
@@ -11,10 +30,10 @@ export function requireAccess(request: Request): Response | null {
   const expected = "Basic " + Buffer.from(`${process.env.APP_USERNAME || "yasmin"}:${password}`).toString("base64");
   const actual = request.headers.get("authorization") || "";
   const hash = (value: string) => createHash("sha256").update(value).digest();
-  if (!timingSafeEqual(hash(actual), hash(expected))) {
+  if (!validSession(request) && !timingSafeEqual(hash(actual), hash(expected))) {
     return new Response("נדרשת כניסה למערכת.", {
       status: 401,
-      headers: { ...headers, "WWW-Authenticate": 'Basic realm="Video Insight", charset="UTF-8"' },
+      headers,
     });
   }
   // Reject cross-site paid actions even when the browser has cached Basic credentials.

@@ -6,7 +6,7 @@ Deployed application commit: 58fe6a3.
 Deployment: d20ac7b2-db23-4f59-851e-cfb3c54245dd (SUCCESS).
 Deployment method: Railway CLI upload, not GitHub automatic deploy.
 
-Production has MOCK_PROVIDERS=false and requires Basic authentication over HTTPS.
+Production has MOCK_PROVIDERS=false and requires authentication over HTTPS. The initial browser Basic prompt was replaced with a login form and a signed HttpOnly/Secure session cookie after the embedded browser showed ERR_INVALID_AUTH_CREDENTIALS.
 Credentials are held in Railway Variables and the local, ignored .env.railway.local; never in this repository.
 The original .env.local was not changed.
 
