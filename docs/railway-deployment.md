@@ -32,3 +32,9 @@ This is a single-owner prototype with one replica. Jobs live in memory and disap
 Local file input only; no YouTube/Vimeo integration, watch skill, visual analysis or human-voice test.
 Railway currently accepts railway.json but warns it is deprecated and will stop working on 2026-12-01; migrate to Railway Infrastructure as Code before that date.
 Neither Yasmin CRM nor Revive AI Social was modified.
+
+## Link ingestion update - 2026-09-21
+
+Commit `9b2dc8a` deployed successfully as `4703541b-53cf-435d-b0f5-e304b135ec6f`. The container includes yt-dlp 2026.08.19 and its default dependencies. Existing login, refresh and protected results were verified live; the new URL form rejected an unsupported URL without creating a job or calling AI.
+
+URL parsing and duration/live/playlist guards passed locally. The full route passed with a fake downloader and mock providers, including success, unavailable/overlong source, skipped paid stages and temporary-file cleanup. Real yt-dlp was installed and its flags checked; an unavailable YouTube test URL failed as expected. Successful real YouTube/Vimeo retrieval and subsequent AI analysis remain unverified, pending an authorized accessible test link. No additional paid AI calls were made.
